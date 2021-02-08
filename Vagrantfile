@@ -25,6 +25,16 @@ MACHINES = {
                         :dfile => './sata4.vdi',
                         :size => 250, # Megabytes
                         :port => 4
+                },
+                :sata5 => {
+                        :dfile => './sata5.vdi',
+                        :size => 250, # Megabytes
+                        :port => 5
+                },
+                :sata6 => {
+                        :dfile => './sata6.vdi',
+                        :size => 250, # Megabytes
+                        :port => 6
                 }
 
 	}
@@ -67,6 +77,21 @@ Vagrant.configure("2") do |config|
 	      mkdir -p ~root/.ssh
               cp ~vagrant/.ssh/auth* ~root/.ssh
 	      yum install -y mdadm smartmontools hdparm gdisk
+
+              # RAID 5 array creation
+              mdadm --zero-superblock --force /dev/sd{b,c,d,e,f,g} > /dev/null 2>&1
+              mdadm --create --verbose /dev/md5 -l 5 -n 6 /dev/sd{b,c,d,e,f,g}
+              echo "DEVICE partitions" > /etc/mdadm.conf
+              mdadm --detail --scan --verbose | awk '/ARRAY/ {print}' >> /etc/mdadm.conf
+              # Partitioning
+              parted -s /dev/md5 mklabel gpt
+              for i in {1..5}; do
+                  parted /dev/md5 mkpart primary ext4 $(((i-1)*20))% $(((i)*20))%
+                  mkfs.ext4 /dev/md5p$i
+                  mkdir /raid$i
+                  mount /dev/md5p$i /raid$i
+                  echo "UUID=$(lsblk -o UUID /dev/md5p$i -n) /raid$i ext4 defaults 0 0" >> /etc/fstab
+              done
   	  SHELL
 
       end
